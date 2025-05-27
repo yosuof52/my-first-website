@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فروشگاه من</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, getDoc, onSnapshot, query, where, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase configuration (replace with your actual config)
+        const firebaseConfig = typeof firebase_config !== 'undefined' ? JSON.parse(firebase_config) : {
+            apiKey: "YOUR_API_KEY", // Replace if not using __firebase_config
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        setLogLevel('debug'); // For development, shows detailed logs
+
+        const appId = typeof app_id !== 'undefined' ? app_id : 'default-app-id';
+        let userId = auth.currentUser?.uid || crypto.randomUUID(); // Initialize userId
+
+        // --- UI Elements ---
+        const langToggleButton = document.getElementById('langToggleButton');
+        const loginButton = document.getElementById('loginButton');
+        const logoutButton = document.getElementById('logoutButton');
+        const userGreeting = document.getElementById('userGreeting');
+        const productGrid = document.getElementById('productGrid');
+        const authModal = document.getElementById('authModal');
+        const closeAuthModalButton = document.getElementById('closeAuthModalButton');
+        const authForm = document.getElementById('authForm');
+        const authFormTitle = document.getElementById('authFormTitle');
+        const toggleToSignUp = document.getElementById('toggleToSignUp');
+        const toggleToLogin = document.getElementById('toggleToLogin');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const authError = document.getElementById('authError');
+        const mainContent = document.getElementById('mainContent');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const currentUserIdDisplay = document.getElementById('currentUserIdDisplay');
+
+
+        // --- Localization ---
+        let currentLang = 'fa';
+        const translations = {
+            fa: {
+                appName: "فروشگاه من",
+                home: "خانه",
+                products: "محصولات",
+                about: "درباره ما",
+                contact: "تماس با ما",
+                login: "ورود",
+                logout: "خروج",
+                greeting: "سلام، ",
+                switchToEnglish: "English",
+                switchToPersian: "فارسی",
+                allProducts: "همه محصولات",
+                addToCart: "افزودن به سبد",
+                loginTitle: "ورود به حساب کاربری",
+signupTitle: "ایجاد حساب کاربری جدید",
+                emailLabel: "ایمیل",
+                passwordLabel: "رمز عبور",
+                loginFormButton: "ورود",
+                signupFormButton: "ثبت نام",
+                orSignUp: "هنوز حساب کاربری ندارید؟ ثبت نام کنید",
+                orLogin: "قبلاً ثبت نام کرده‌اید؟ وارد شوید",
+                authErrorDefault: "خطایی رخ داد. لطفاً دوباره تلاش کنید.",
+                loading: "در حال بارگذاری...",
+                aboutUsContent: "ما یک فروشگاه آنلاین پیشرو هستیم که بهترین محصولات را با قیمت‌های رقابتی ارائه می‌دهیم. ماموریت ما ارائه تجربه خریدی بی‌نظیر به مشتریانمان است.",
+                contactUsContent: "برای هرگونه سوال یا پشتیبانی، لطفاً با ما از طریق ایمیل support@example.com یا شماره تلفن ۰۲۱-۱۲۳۴۵۶۷۸ تماس بگیرید.",
+                footerSlogan: "بهترین‌ها را با ما تجربه کنید!",
+                trustBadge: "[نماد اعتماد الکترونیکی]",
+                featuredProducts: "محصولات ویژه",
+                userIdLabel: "شناسه کاربری شما:",
+                productLoadingError: "خطا در بارگذاری محصولات.",
+                productAddedToCart: "محصول به سبد خرید اضافه شد (نمایشی)",
+                noProducts: "محصولی برای نمایش وجود ندارد."
+            },
+            en: {
+                appName: "My Store",
+                home: "Home",
+                products: "Products",
+                about: "About Us",
+                contact: "Contact Us",
+                login: "Login",
+                logout: "Logout",
+                greeting: "Hello, ",
+                switchToEnglish: "English",
+                switchToPersian: "فارسی",
+                allProducts: "All Products",
+                addToCart: "Add to Cart",
+                loginTitle: "Login to your account",
+                signupTitle: "Create a new account",
+                emailLabel: "Email",
+                passwordLabel: "Password",
+                loginFormButton: "Login",
+                signupFormButton: "Sign Up",
+                orSignUp: "Don't have an account? Sign Up",
+                orLogin: "Already have an account? Login",
+                authErrorDefault: "An error occurred. Please try again.",
+                loading: "Loading...",
+                aboutUsContent: "We are a leading online store providing the best products at competitive prices. Our mission is to offer an unparalleled shopping experience to our customers.",
+                contactUsContent: "For any inquiries or support, please contact us via email at support@example.com or call us at +98-21-12345678.",
+                footerSlogan: "Experience the best with us!",
+                trustBadge: "[E-Trust Symbol]",
+                featuredProducts: "Featured Products",
+                userIdLabel: "Your User ID:",
+                productLoadingError: "Error loading products.",
+                productAddedToCart: "Product added to cart (demo)",
+                noProducts: "No products to display."
+            }
+        };
+
+        function _(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function updateTexts() {
+            document.documentElement.lang = currentLang;
+            document.documentElement.dir = currentLang === 'fa' ? 'rtl' : 'ltr';
+
+            document.title = _('appName');
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                if (el.tagName === 'INPUT' && el.type === 'submit') {
+                    el.value = _(key);
+                } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                     el.placeholder = _(key);
+                }
+                else {
+                    el.textContent = _(key);
+                }
+            });
+            // Specific updates
+if (langToggleButton) langToggleButton.textContent = currentLang === 'fa' ? _('switchToEnglish') : _('switchToPersian');
+            if (loginButton) loginButton.textContent = _('login');
+            if (logoutButton) logoutButton.textContent = _('logout');
+            if (authFormTitle) authFormTitle.textContent = isLoginMode ? _('loginTitle') : _('signupTitle');
+            if (authForm.querySelector('button[type=submit]')) authForm.querySelector('button[type=submit]').textContent = isLoginMode ? _('loginFormButton') : _('signupFormButton');
+            if (toggleToSignUp) toggleToSignUp.textContent = _('orSignUp');
+            if (toggleToLogin) toggleToLogin.textContent = _('orLogin');
+            if (emailInput) emailInput.previousElementSibling.textContent = _('emailLabel');
+            if (passwordInput) passwordInput.previousElementSibling.textContent = _('passwordLabel');
+            if (document.getElementById('aboutTitle')) document.getElementById('aboutTitle').textContent = _('about');
+            if (document.getElementById('aboutText')) document.getElementById('aboutText').textContent = _('aboutUsContent');
+            if (document.getElementById('contactTitle')) document.getElementById('contactTitle').textContent = _('contact');
+            if (document.getElementById('contactText')) document.getElementById('contactText').textContent = _('contactUsContent');
+            if (document.getElementById('footerSlogan')) document.getElementById('footerSlogan').textContent = _('footerSlogan');
+            if (document.getElementById('trustBadge')) document.getElementById('trustBadge').textContent = _('trustBadge');
+            if (document.getElementById('featuredProductsTitle')) document.getElementById('featuredProductsTitle').textContent = _('featuredProducts');
+            if (document.getElementById('allProductsTitle')) document.getElementById('allProductsTitle').textContent = _('allProducts');
+            if (currentUserIdDisplay && auth.currentUser) {
+                 currentUserIdDisplay.textContent = ${_('userIdLabel')} ${auth.currentUser.uid};
+            } else if (currentUserIdDisplay) {
+                 currentUserIdDisplay.textContent = '';
+            }
+
+
+            // Re-render products if they are already loaded, to update their text
+            if (window.cachedProducts && window.cachedProducts.length > 0) {
+                renderProducts(window.cachedProducts);
+            }
+        }
+
+        if (langToggleButton) {
+            langToggleButton.addEventListener('click', () => {
+                currentLang = currentLang === 'fa' ? 'en' : 'fa';
+                updateTexts();
+            });
+        }
+
+        // --- Authentication ---
+        let isLoginMode = true;
+
+        async function handleAuth() {
+             // Sign in (or create user)
+            if (typeof initial_auth_token !== 'undefined' && initial_auth_token) {
+                try {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log("Signed in with custom token.");
+                } catch (error) {
+                    console.error("Custom token sign-in error:", error);
+                    // Fallback to anonymous sign-in if custom token fails
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously after custom token failure.");
+                }
+            } else {
+                try {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                } catch (error) {
+                    console.error("Anonymous sign-in error:", error);
+                }
+            }
+        }
+
+
+        onAuthStateChanged(auth, (user) => {
+            userId = user?.uid || crypto.randomUUID(); // Update userId on auth state change
+console.log("Auth state changed. Current user:", user, "User ID:", userId);
+            if (user) {
+                if (userGreeting) userGreeting.textContent = ${_(translations[currentLang].greeting)} ${user.email || 'کاربر مهمان'};
+                if (loginButton) loginButton.classList.add('hidden');
+                if (logoutButton) logoutButton.classList.remove('hidden');
+                if (authModal) authModal.classList.add('hidden');
+                if (currentUserIdDisplay) {
+                    currentUserIdDisplay.textContent = ${_(translations[currentLang].userIdLabel)} ${user.uid};
+                    currentUserIdDisplay.classList.remove('hidden');
+                }
+
+            } else {
+                if (userGreeting) userGreeting.textContent = '';
+                if (loginButton) loginButton.classList.remove('hidden');
+                if (logoutButton) logoutButton.classList.add('hidden');
+                if (currentUserIdDisplay) {
+                    currentUserIdDisplay.textContent = '';
+                    currentUserIdDisplay.classList.add('hidden');
+                }
+            }
+            // Fetch products after auth state is confirmed, to ensure rules are applied if any
+            fetchProducts();
+        });
+
+
+        if (loginButton) {
+            loginButton.addEventListener('click', () => {
+                isLoginMode = true;
+                if (authFormTitle) authFormTitle.textContent = _('loginTitle');
+                if (authForm.querySelector('button[type=submit]')) authForm.querySelector('button[type=submit]').textContent = _('loginFormButton');
+                if (toggleToSignUp) toggleToSignUp.classList.remove('hidden');
+                if (toggleToLogin) toggleToLogin.classList.add('hidden');
+                if (authModal) authModal.classList.remove('hidden');
+                if (authError) authError.textContent = '';
+            });
+        }
+
+        if (logoutButton) {
+            logoutButton.addEventListener('click', async () => {
+                try {
+                    await signOut(auth);
+                } catch (error) {
+                    console.error("Error signing out: ", error);
+                }
+            });
+        }
+
+        if (closeAuthModalButton) {
+            closeAuthModalButton.addEventListener('click', () => {
+                if (authModal) authModal.classList.add('hidden');
+            });
+        }
+        
+        if (toggleToSignUp) {
+            toggleToSignUp.addEventListener('click', (e) => {
+                e.preventDefault();
+                isLoginMode = false;
+                if (authFormTitle) authFormTitle.textContent = _('signupTitle');
+                if (authForm.querySelector('button[type=submit]')) authForm.querySelector('button[type=submit]').textContent = _('signupFormButton');
+                toggleToSignUp.classList.add('hidden');
+                if (toggleToLogin) toggleToLogin.classList.remove('hidden');
+                if (authError) authError.textContent = '';
+            });
+        }
+
+        if (toggleToLogin) {
+            toggleToLogin.addEventListener('click', (e) => {
+                e.preventDefault();
+                isLoginMode = true;
+                if (authFormTitle) authFormTitle.textContent = _('loginTitle');
+                if (authForm.querySelector('button[type=submit]')) authForm.querySelector('button[type=submit]').textContent = _('loginFormButton');
+                if (toggleToSignUp) toggleToSignUp.classList.remove('hidden');
+                toggleToLogin.classList.add('hidden');
+                if (authError) authError.textContent = '';
+            });
+        }
+
+        if (authForm) {
+            authForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = emailInput.value;
+                const password = passwordInput.value;
+                if (authError) authError.textContent = '';
+try {
+                    if (isLoginMode) {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    } else {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                    }
+                    // Modal will be hidden by onAuthStateChanged
+                } catch (error) {
+                    console.error("Authentication error: ", error);
+                    if (authError) authError.textContent = error.message || _('authErrorDefault');
+                }
+            });
+        }
+
+        // --- Products ---
+        window.cachedProducts = []; // To store fetched products for re-rendering on lang change
+
+        async function fetchProducts() {
+            if (!db) {
+                console.error("Firestore not initialized");
+                if (productGrid) productGrid.innerHTML = <p class="text-red-500 text-center col-span-full">${_('productLoadingError')}</p>;
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                return;
+            }
+            if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+            if (productGrid) productGrid.innerHTML = ''; // Clear previous products
+
+            try {
+                // Path: /artifacts/{appId}/public/data/products
+                const productsCollectionPath = artifacts/${appId}/public/data/products;
+                const productsCol = collection(db, productsCollectionPath);
+                
+                // Use onSnapshot for real-time updates (optional, can be replaced with getDocs for one-time fetch)
+                onSnapshot(productsCol, (snapshot) => {
+                    const products = [];
+                    snapshot.forEach(doc => {
+                        products.push({ id: doc.id, ...doc.data() });
+                    });
+                    window.cachedProducts = products; // Cache for language switching
+                    if (products.length === 0) {
+                         // Attempt to add sample data if collection is empty
+                        addSampleProductsIfEmpty(productsCollectionPath);
+                    } else {
+                        renderProducts(products);
+                    }
+                    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                }, (error) => {
+                    console.error("Error fetching products: ", error);
+                    if (productGrid) productGrid.innerHTML = <p class="text-red-500 text-center col-span-full">${_('productLoadingError')}</p>;
+                    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                });
+
+            } catch (error) {
+                console.error("Error setting up product listener: ", error);
+                if (productGrid) productGrid.innerHTML = <p class="text-red-500 text-center col-span-full">${_('productLoadingError')}</p>;
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            }
+        }
+        
+        async function addSampleProductsIfEmpty(collectionPath) {
+            console.log("No products found, attempting to add sample products.");
+            const sampleProducts = [
+                { 
+                    name_fa: "لپ تاپ مدل X", 
+                    name_en: "Laptop Model X", 
+                    description_fa: "یک لپ تاپ قدرتمند با آخرین تکنولوژی روز.",
+                    description_en: "A powerful laptop with the latest technology.",
+                    price: 25000000, 
+                    imageUrl: "https://placehold.co/600x400/3498db/ffffff?text=لپتاپ+X",
+                    category_fa: "لپ تاپ",
+                    category_en: "Laptop"
+                },
+                { 
+                    name_fa: "گوشی هوشمند Y",
+name_en: "Smartphone Y", 
+                    description_fa: "گوشی هوشمند با دوربین عالی و صفحه نمایش با کیفیت.",
+                    description_en: "Smartphone with an excellent camera and high-quality display.",
+                    price: 15000000, 
+                    imageUrl: "https://placehold.co/600x400/2ecc71/ffffff?text=گوشی+Y",
+                    category_fa: "موبایل",
+                    category_en: "Mobile"
+                },
+                { 
+                    name_fa: "هدفون بی‌سیم Z", 
+                    name_en: "Wireless Headphones Z", 
+                    description_fa: "هدفون با کیفیت صدای فوق‌العاده و طراحی ارگونومیک.",
+                    description_en: "Headphones with superb sound quality and ergonomic design.",
+                    price: 3000000, 
+                    imageUrl: "https://placehold.co/600x400/e74c3c/ffffff?text=هدفون+Z",
+                    category_fa: "لوازم جانبی",
+                    category_en: "Accessories"
+                }
+            ];
+
+            try {
+                for (const product of sampleProducts) {
+                    // Use addDoc to let Firestore generate the ID
+                    await addDoc(collection(db, collectionPath), product);
+                }
+                console.log("Sample products added. Firestore will trigger onSnapshot to render them.");
+                // fetchProducts(); // No need to call fetchProducts, onSnapshot will handle it
+            } catch (error) {
+                console.error("Error adding sample products: ", error);
+                if (productGrid) productGrid.innerHTML = <p class="text-yellow-500 text-center col-span-full">${_('noProducts')} (${_('productLoadingError')})</p>;
+            }
+        }
+
+
+        function renderProducts(products) {
+            if (!productGrid) return;
+            if (products.length === 0) {
+                productGrid.innerHTML = <p class="text-gray-500 text-center col-span-full">${_('noProducts')}</p>;
+                return;
+            }
+
+            productGrid.innerHTML = ''; // Clear previous items
+            products.forEach(product => {
+                const name = currentLang === 'fa' ? product.name_fa : product.name_en;
+                const description = currentLang === 'fa' ? product.description_fa : product.description_en;
+                const category = currentLang === 'fa' ? product.category_fa : product.category_en;
+
+                const productCard = 
+                    <div class="bg-white rounded-lg shadow-lg overflow-hidden transform transition-all hover:scale-105">
+                        <img src="${product.imageUrl || 'https://placehold.co/600x400/cccccc/ffffff?text=بدون+عکس'}" alt="${name}" class="w-full h-48 object-cover" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/ffffff?text=خطا+در+بارگذاری+تصویر';">
+                        <div class="p-4">
+                            <h3 class="text-xl font-semibold mb-2 text-gray-800">${name}</h3>
+                            <p class="text-sm text-gray-600 mb-2">${category}</p>
+                            <p class="text-xs text-gray-500 mb-3 h-10 overflow-hidden">${description}</p>
+                            <div class="flex justify-between items-center">
+                                <p class="text-lg font-bold text-indigo-600">${product.price.toLocaleString('fa-IR')} تومان</p>
+                                <button data-product-id="${product.id}" class="add-to-cart-btn bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                                    ${_('addToCart')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ;
+                productGrid.innerHTML += productCard;
+            });
+// Add event listeners to new "Add to Cart" buttons
+            document.querySelectorAll('.add-to-cart-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const productId = e.target.dataset.productId;
+                    console.log(Product ${productId} add to cart clicked (demo).);
+                    // Simple notification
+                    const notification = document.createElement('div');
+                    notification.textContent = _('productAddedToCart');
+                    notification.className = 'fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-md';
+                    document.body.appendChild(notification);
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+                });
+            });
+        }
+        
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateTexts(); // Initial text setup
+            await handleAuth(); // Handle initial authentication (anonymous or custom token)
+            // fetchProducts(); // Products are now fetched after auth state change
+        });
+
+    </script>
+    <style>
+        body { font-family: 'Vazirmatn', 'Inter', sans-serif; }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .rtl { direction: rtl; }
+        .ltr { direction: ltr; }
+        /* Ensure images don't cause layout shift if they load slow */
+        .product-card img { aspect-ratio: 3 / 2; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
+            <a href="#" class="text-2xl font-bold text-indigo-600" data-translate="appName">فروشگاه من</a>
+            
+            <nav class="space-x-4 space-x-reverse mt-2 sm:mt-0">
+                <a href="#" class="text-gray-600 hover:text-indigo-500 px-2 py-1 rounded-md" data-translate="home">خانه</a>
+                <a href="#productsSection" class="text-gray-600 hover:text-indigo-500 px-2 py-1 rounded-md" data-translate="products">محصولات</a>
+                <a href="#aboutSection" class="text-gray-600 hover:text-indigo-500 px-2 py-1 rounded-md" data-translate="about">درباره ما</a>
+                <a href="#contactSection" class="text-gray-600 hover:text-indigo-500 px-2 py-1 rounded-md" data-translate="contact">تماس با ما</a>
+            </nav>
+
+            <div class="flex items-center space-x-3 space-x-reverse mt-2 sm:mt-0">
+                <button id="langToggleButton" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md transition-colors" data-translate="switchToEnglish">English</button>
+                <button id="loginButton" class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-4 py-1 rounded-md transition-colors" data-translate="login">ورود</button>
+                <button id="logoutButton" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-1 rounded-md transition-colors" data-translate="logout">خروج</button>
+                <span id="userGreeting" class="text-sm text-gray-700"></span>
+            </div>
+        </div>
+        <div id="currentUserIdDisplay" class="hidden text-center text-xs text-gray-500 py-1 bg-gray-50"></div>
+    </header>
+
+    <main id="mainContent" class="container mx-auto px-4 py-8">
+        <section class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-12 px-6 rounded-xl shadow-xl mb-12 text-center">
+<h1 class="text-4xl md:text-5xl font-bold mb-4" data-translate="appName">فروشگاه من</h1>
+            <p class="text-lg md:text-xl mb-6" data-translate="footerSlogan">بهترین‌ها را با ما تجربه کنید!</p>
+            <a href="#productsSection" class="bg-white text-indigo-600 font-semibold py-3 px-8 rounded-lg shadow-md hover:bg-gray-100 transition-colors text-lg">
+                مشاهده محصولات
+            </a>
+        </section>
+
+        <section id="productsSection" class="mb-12">
+            <h2 id="featuredProductsTitle" class="text-2xl font-semibold mb-6 text-gray-700 border-b-2 border-indigo-500 pb-2" data-translate="featuredProducts">محصولات ویژه</h2>
+            <div id="loadingIndicator" class="text-center py-8">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto"></div>
+                <p class="mt-2 text-gray-600" data-translate="loading">در حال بارگذاری...</p>
+            </div>
+            <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                </div>
+        </section>
+        
+        <!-- <section class="mb-12">
+            <h2 id="allProductsTitle" class="text-2xl font-semibold mb-6 text-gray-700 border-b-2 border-indigo-500 pb-2" data-translate="allProducts">همه محصولات</h2>
+             Add another grid or filtering options here in the future
+        </section> -->
+
+
+        <section id="aboutSection" class="mb-12 p-6 bg-white rounded-xl shadow-lg">
+            <h2 id="aboutTitle" class="text-2xl font-semibold mb-4 text-gray-700" data-translate="about">درباره ما</h2>
+            <p id="aboutText" class="text-gray-600 leading-relaxed" data-translate="aboutUsContent">ما یک فروشگاه آنلاین پیشرو هستیم که بهترین محصولات را با قیمت‌های رقابتی ارائه می‌دهیم. ماموریت ما ارائه تجربه خریدی بی‌نظیر به مشتریانمان است.</p>
+        </section>
+
+        <section id="contactSection" class="mb-12 p-6 bg-white rounded-xl shadow-lg">
+            <h2 id="contactTitle" class="text-2xl font-semibold mb-4 text-gray-700" data-translate="contact">تماس با ما</h2>
+            <p id="contactText" class="text-gray-600 leading-relaxed" data-translate="contactUsContent">برای هرگونه سوال یا پشتیبانی، لطفاً با ما از طریق ایمیل support@example.com یا شماره تلفن ۰۲۱-۱۲۳۴۵۶۷۸ تماس بگیرید.</p>
+        </section>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-10">
+        <div class="container mx-auto px-4 text-center">
+            <p id="footerSlogan" class="mb-4 text-lg" data-translate="footerSlogan">بهترین‌ها را با ما تجربه کنید!</p>
+            <div class="flex justify-center space-x-6 space-x-reverse mb-6">
+                <a href="#" aria-label="Telegram" class="text-gray-400 hover:text-white transition-colors"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.71l-7.88 3.73c-.3.14-.4.47-.26.76l1.9 3.9c.14.3.47.4.76.26l7.88-3.73c.3-.14.4-.47.26-.76l-1.9-3.9c-.14-.29-.47-.4-.76-.26zM11.9 15.65l-1.34-2.78 5.3-2.5-1.34 2.78-2.62-1.25z"/></svg></a>
+                <a href="#" aria-label="Instagram" class="text-gray-400 hover:text-white transition-colors"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 7.53 2.04 6.48 2.09c-1.05.05-1.79.22-2.42.47-.65.25-1.23.59-1.77 1.14S1.23 4.93.98 5.58c-.25.62-.42 1.37-.47 2.42C.46 9.07.42 9.67.42 12s.04.93.09 1.98c.05 1.05.22 1.79.47 2.42.25.65.59 1.23 1.14 1.77s1.12.89 1.77 1.14c.62.25 1.37.42 2.42.47.05.05 1.05.09 2 .09s.95-.04 2-.09c1.05-.05 1.79-.22 2.42-.47.65-.25 1.23-.59 1.77-1.14s.89-1.12 1.14-1.77c.25-.62.42-1.37.47-2.42.05-.05.09-1.05.09-2s-.04-.95-.09-2c-.05-1.05-.22-1.79-.47-2.42-.25-.65-.59-1.23-1.14-1.77S19.07 1.23 18.42.98c-.62-.25-1.37-.42-2.42-.47C14.93.46 14.33.42 12 .42zm0 2.16c2.7 0 3.02.01 4.08.06 1.02.05 1.5.2 1.8.33.4.15.7.33.98.6.28.28.45.58.6.98.13.3.28.78.33 1.8.05 1.06.06 1.38.06 4.08s-.01 3.02-.06 4.08c-.05 1.02-.2 1.5-.33
+1.8-.15.4-.33.7-.6.98-.28.28-.58.45-.98.6-.3.13-.78.28-1.8.33-1.06.05-1.38.06-4.08.06s-3.02-.01-4.08-.06c-1.02-.05-1.5-.2-1.8-.33-.4-.15-.7-.33-.98-.6-.28-.28-.45-.58-.6-.98-.13-.3-.28-.78-.33-1.8-.05-1.06-.06-1.38-.06-4.08s.01-3.02.06-4.08c.05-1.02.2-1.5.33-1.8.15-.4.33-.7.6-.98.28-.28.58-.45.98-.6.3-.13.78-.28 1.8-.33C8.98 4.59 9.3 4.58 12 4.58zm0 5.83c-1.93 0-3.5 1.57-3.5 3.5s1.57 3.5 3.5 3.5 3.5-1.57 3.5-3.5-1.57-3.5-3.5-3.5zm0 5.83c-.91 0-1.65-.74-1.65-1.65s.74-1.65 1.65-1.65 1.65.74 1.65 1.65-.74 1.65-1.65 1.65zm5.25-6.9c-.58 0-1.05-.47-1.05-1.05s.47-1.05 1.05-1.05 1.05.47 1.05 1.05-.47 1.05-1.05 1.05z"/></svg></a>
+                <a href="#" aria-label="Twitter" class="text-gray-400 hover:text-white transition-colors"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M22.46 6c-.77.35-1.6.58-2.46.67.9-.53 1.59-1.37 1.92-2.38-.84.5-1.78.86-2.79 1.07C18.25 4.48 17.06 4 15.72 4c-2.66 0-4.82 2.17-4.82 4.83 0 .38.04.75.13 1.11C7.44 9.72 4.21 7.96 2.01 5.29c-.4.68-.63 1.47-.63 2.32 0 1.68.85 3.15 2.15 4-.79-.03-1.53-.24-2.18-.6v.06c0 2.35 1.67 4.3 3.89 4.74-.4.11-.82.17-1.25.17-.31 0-.61-.03-.91-.09.62 1.92 2.41 3.32 4.53 3.36C6.94 18.48 5.01 19.1 3 19.1c-.39 0-.77-.02-1.14-.07C3.99 20.29 6.41 21 9.01 21c7.7 0 11.91-6.39 11.91-11.91 0-.18 0-.36-.01-.54.82-.59 1.53-1.32 2.09-2.16z"/></svg></a>
+                </div>
+            <p id="trustBadge" class="text-sm text-gray-500 mb-2" data-translate="trustBadge">[نماد اعتماد الکترونیکی]</p>
+            <p class="text-xs text-gray-500">&copy; <span id="currentYear">2024</span> <span data-translate="appName">فروشگاه من</span>. تمام حقوق محفوظ است.</p>
+        </div>
+    </footer>
+
+    <div id="authModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-xl bg-white">
+            <div class="mt-3 text-center">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="authFormTitle" class="text-lg leading-6 font-medium text-gray-900" data-translate="loginTitle">ورود به حساب کاربری</h3>
+                    <button id="closeAuthModalButton" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <form id="authForm" class="space-y-4">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 text-right" data-translate="emailLabel">ایمیل</label>
+                        <input type="email" name="email" id="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-right" placeholder="your@email.com">
+                    </div>
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 text-right" data-translate="passwordLabel">رمز عبور</label>
+                        <input type="password" name="password" id="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-right" placeholder="****">
+                    </div>
+                    <p id="authError" class="text-sm text-red-500"></p>
+                    <div>
+                        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" data-translate="loginFormButton">
+ورود
+                        </button>
+                    </div>
+                </form>
+                <div class="mt-4 text-sm">
+                    <a href="#" id="toggleToSignUp" class="font-medium text-indigo-600 hover:text-indigo-500" data-translate="orSignUp">هنوز حساب کاربری ندارید؟ ثبت نام کنید</a>
+                    <a href="#" id="toggleToLogin" class="hidden font-medium text-indigo-600 hover:text-indigo-500" data-translate="orLogin">قبلاً ثبت نام کرده‌اید؟ وارد شوید</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>
